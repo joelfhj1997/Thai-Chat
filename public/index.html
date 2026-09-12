@@ -242,7 +242,7 @@
 <div id="yt-player" style="display: none;"></div>
 
 <div class="container">
-    <button id="bgmBtn">🔈 BGM Off</button>
+    <button id="bgmBtn">🔊 BGM On</button>
     <h1>THAI TRANSLATOR</h1>
 
     <div class="input-group">
@@ -285,7 +285,7 @@
             width: '0',
             videoId: 'D5L36JDKxR0', // Animal Crossing - 5 PM
             playerVars: {
-                'autoplay': 0,
+                'autoplay': 1,
                 'controls': 0,
                 'loop': 1,
                 'playlist': 'D5L36JDKxR0' // Required for loop to work
@@ -299,6 +299,20 @@
     function onPlayerReady(event) {
         ytReady = true;
         event.target.setVolume(25); // Set a cozy, low volume (25%)
+        if (!hasManuallyStoppedBgm) {
+            playBgm();
+        }
+    }
+
+    function playBgm() {
+        if (!ytReady || hasManuallyStoppedBgm) return;
+        try {
+            ytPlayer.playVideo();
+            isBgmPlaying = true;
+            bgmBtn.textContent = '🔊 BGM On';
+        } catch (e) {
+            console.log('Autoplay waiting for user gesture');
+        }
     }
 
     function toggleBgm() {
@@ -309,9 +323,8 @@
             bgmBtn.textContent = '🔈 BGM Off';
             hasManuallyStoppedBgm = true;
         } else {
-            ytPlayer.playVideo();
-            isBgmPlaying = true;
-            bgmBtn.textContent = '🔊 BGM On';
+            hasManuallyStoppedBgm = false;
+            playBgm();
         }
     }
 
@@ -358,13 +371,17 @@
         const toast = document.getElementById('toast');
         const copyBtn = document.getElementById('copyBtn');
 
-        // Auto-play BGM on first user interaction
-        document.body.addEventListener('click', () => {
+        // Start BGM on first user interaction if not already playing
+        function tryStartBgmOnInteraction() {
             initAudio();
-            if (!isBgmPlaying && !hasManuallyStoppedBgm && ytReady) {
-                toggleBgm();
+            if (!hasManuallyStoppedBgm && ytReady && !isBgmPlaying) {
+                playBgm();
             }
-        }, { once: true });
+        }
+
+        window.addEventListener('click', tryStartBgmOnInteraction, { passive: true });
+        window.addEventListener('keydown', tryStartBgmOnInteraction, { passive: true });
+        window.addEventListener('touchstart', tryStartBgmOnInteraction, { passive: true });
         
         // Manual BGM Toggle Button
         bgmBtn.addEventListener('click', (e) => {
