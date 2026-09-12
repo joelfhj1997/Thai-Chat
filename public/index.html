@@ -444,29 +444,62 @@
         async function translateText(text) {
             outputBox.innerHTML = '<div class="dots"><span>.</span><span>.</span><span>.</span><span>.</span><span>.</span></div>';
 
-            try {
-                const response = await fetch('/api/translate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: text, tone: currentTone })
-                });
+            const maxRetries = 10;
+            const delayMs = 5000;
 
-                if (!response.ok) throw new Error((await response.json()).error || 'Failed to translate');
-                
-                const translation = (await response.json()).translation;
-                
-                outputBox.style.opacity = 0;
-                setTimeout(() => {
-                    outputBox.textContent = translation;
-                    outputBox.style.opacity = 1;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch('/api/translate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: text, tone: currentTone })
+                    });
+
+                    if (!response.ok) {
+                        // Render free tier sleeping errors
+                        if (response.status === 502 || response.status === 503 || response.status === 504) {
+                            if (i === maxRetries - 1) {
+                                throw new Error('Server took too long to wake up. Please try again.');
+                            }
+                            outputBox.innerHTML = '<div style="font-size: 0.95rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">☕ Waking up server... <div class="dots" style="font-size: 1rem;"><span>.</span><span>.</span><span>.</span></div></div>';
+                            await new Promise(r => setTimeout(r, delayMs));
+                            continue;
+                        }
+                        
+                        let errorMsg = 'Failed to translate';
+                        try {
+                            const errData = await response.json();
+                            errorMsg = errData.error || errorMsg;
+                        } catch(e) {
+                            errorMsg = `Server error (${response.status}).`;
+                        }
+                        throw new Error(errorMsg);
+                    }
                     
-                    navigator.clipboard.writeText(translation)
-                        .then(showToast)
-                        .catch(e => console.log('Auto-copy blocked by browser. User must click copy.'));
-                }, 200);
+                    const translation = (await response.json()).translation;
+                    
+                    outputBox.style.opacity = 0;
+                    setTimeout(() => {
+                        outputBox.textContent = translation;
+                        outputBox.style.opacity = 1;
+                        
+                        navigator.clipboard.writeText(translation)
+                            .then(showToast)
+                            .catch(e => console.log('Auto-copy blocked by browser. User must click copy.'));
+                    }, 200);
+                    
+                    return; // Success, exit the function
 
-            } catch (error) {
-                outputBox.textContent = `Error: ${error.message}`;
+                } catch (error) {
+                    // Network errors (like connection refused during boot)
+                    if (i === maxRetries - 1 || (!error.message.includes('fetch') && !error.message.includes('Network'))) {
+                        outputBox.textContent = `Error: ${error.message}`;
+                        return;
+                    }
+                    
+                    outputBox.innerHTML = '<div style="font-size: 0.95rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">☕ Waking up server... <div class="dots" style="font-size: 1rem;"><span>.</span><span>.</span><span>.</span></div></div>';
+                    await new Promise(r => setTimeout(r, delayMs));
+                }
             }
         }
 
