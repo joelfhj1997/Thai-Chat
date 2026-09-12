@@ -514,6 +514,17 @@
                         } catch(e) {
                             errorMsg = `Server error (${response.status}).`;
                         }
+
+                        // Auto-retry if Google AI is experiencing a temporary spike in traffic
+                        if (errorMsg.includes('high demand') || errorMsg.includes('503') || errorMsg.includes('UNAVAILABLE')) {
+                            if (i === maxRetries - 1) {
+                                throw new Error('Google AI is currently under heavy load. Please try again in a moment! ⏳');
+                            }
+                            outputBox.innerHTML = '<div style="font-size: 0.95rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">⏳ Google AI is busy, retrying... <div class="dots" style="font-size: 1rem;"><span>.</span><span>.</span><span>.</span></div></div>';
+                            await new Promise(r => setTimeout(r, 2500));
+                            continue;
+                        }
+
                         throw new Error(errorMsg);
                     }
                     
@@ -532,13 +543,17 @@
                     return; // Success, exit the function
 
                 } catch (error) {
-                    // Network errors (like connection refused during boot)
-                    if (i === maxRetries - 1 || (!error.message.includes('fetch') && !error.message.includes('Network'))) {
+                    const isRetryable = error.message.includes('fetch') || 
+                                        error.message.includes('Network') ||
+                                        error.message.includes('high demand') ||
+                                        error.message.includes('503');
+
+                    if (i === maxRetries - 1 || !isRetryable) {
                         outputBox.textContent = `Error: ${error.message}`;
                         return;
                     }
                     
-                    outputBox.innerHTML = '<div style="font-size: 0.95rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">☕ Waking up server... <div class="dots" style="font-size: 1rem;"><span>.</span><span>.</span><span>.</span></div></div>';
+                    outputBox.innerHTML = '<div style="font-size: 0.95rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">☕ Retrying translation... <div class="dots" style="font-size: 1rem;"><span>.</span><span>.</span><span>.</span></div></div>';
                     await new Promise(r => setTimeout(r, delayMs));
                 }
             }
