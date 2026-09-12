@@ -239,7 +239,7 @@
 </head>
 <body>
 
-<div id="yt-player" style="display: none;"></div>
+<div id="yt-player" style="position: fixed; top: -9999px; left: -9999px; width: 200px; height: 200px; opacity: 0.01; pointer-events: none;"></div>
 
 <div class="container">
     <button id="bgmBtn">🔊 BGM On</button>
@@ -277,54 +277,73 @@
     let ytReady = false;
     let isBgmPlaying = false;
     let hasManuallyStoppedBgm = false;
+    let userHasInteracted = false;
     const bgmBtn = document.getElementById('bgmBtn');
 
     function onYouTubeIframeAPIReady() {
         ytPlayer = new YT.Player('yt-player', {
-            height: '0',
-            width: '0',
+            height: '200',
+            width: '200',
             videoId: 'D5L36JDKxR0', // Animal Crossing - 5 PM
             playerVars: {
                 'autoplay': 1,
                 'controls': 0,
                 'loop': 1,
-                'playlist': 'D5L36JDKxR0' // Required for loop to work
+                'playlist': 'D5L36JDKxR0',
+                'playsinline': 1
             },
             events: {
-                'onReady': onPlayerReady
+                'onReady': onPlayerReady,
+                'onStateChange': onPlayerStateChange
             }
         });
     }
 
     function onPlayerReady(event) {
         ytReady = true;
-        event.target.setVolume(25); // Set a cozy, low volume (25%)
+        event.target.setVolume(25); // Set cozy volume (25%)
         if (!hasManuallyStoppedBgm) {
             playBgm();
         }
+    }
+
+    function onPlayerStateChange(event) {
+        // 1 = YT.PlayerState.PLAYING
+        if (event.data === 1) {
+            isBgmPlaying = true;
+            bgmBtn.textContent = '🔊 BGM On';
+        } else if (event.data === 2 && hasManuallyStoppedBgm) {
+            // 2 = YT.PlayerState.PAUSED
+            isBgmPlaying = false;
+            bgmBtn.textContent = '🔈 BGM Off';
+        }
+    }
+
+    function isPlayerActuallyPlaying() {
+        return ytReady && ytPlayer && typeof ytPlayer.getPlayerState === 'function' && ytPlayer.getPlayerState() === 1;
     }
 
     function playBgm() {
         if (!ytReady || hasManuallyStoppedBgm) return;
         try {
             ytPlayer.playVideo();
-            isBgmPlaying = true;
-            bgmBtn.textContent = '🔊 BGM On';
         } catch (e) {
-            console.log('Autoplay waiting for user gesture');
+            console.log('Autoplay pending user gesture');
         }
     }
 
     function toggleBgm() {
         if (!ytReady) return;
-        if (isBgmPlaying) {
+        if (isPlayerActuallyPlaying() || isBgmPlaying) {
             ytPlayer.pauseVideo();
             isBgmPlaying = false;
-            bgmBtn.textContent = '🔈 BGM Off';
             hasManuallyStoppedBgm = true;
+            bgmBtn.textContent = '🔈 BGM Off';
         } else {
             hasManuallyStoppedBgm = false;
             playBgm();
+            isBgmPlaying = true;
+            bgmBtn.textContent = '🔊 BGM On';
         }
     }
 
@@ -371,11 +390,16 @@
         const toast = document.getElementById('toast');
         const copyBtn = document.getElementById('copyBtn');
 
-        // Start BGM on first user interaction if not already playing
+        // Start BGM on user interaction if not already playing
         function tryStartBgmOnInteraction() {
             initAudio();
-            if (!hasManuallyStoppedBgm && ytReady && !isBgmPlaying) {
-                playBgm();
+            userHasInteracted = true;
+            if (!hasManuallyStoppedBgm) {
+                if (ytReady) {
+                    if (!isPlayerActuallyPlaying()) {
+                        playBgm();
+                    }
+                }
             }
         }
 
